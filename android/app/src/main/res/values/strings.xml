@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WellbeingX</string>
+    <string name="wx_accessibility_summary">Allows WellbeingX to gently block apps you have chosen to step away from.</string>
+    <string name="wx_accessibility_description">WellbeingX uses Accessibility only to detect when a blocked app comes to the foreground and to show a soft block screen on top of it. No screen content is recorded.</string>
+    <string name="wx_focus_channel">Focus sessions</string>
+    <string name="wx_block_channel">App blocking</string>
+    <string name="wx_focus_running">Focus session in progress</string>
+    <string name="wx_block_active">Stay-Away is active</string>
+</resources>

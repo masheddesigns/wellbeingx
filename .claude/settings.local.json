@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter --version)",
+      "Bash(flutter create *)",
+      "Bash(flutter pub *)",
+      "Bash(dart run *)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)",
+      "Bash(flutter build *)",
+      "Bash(flutter doctor *)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb devices *)",
+      "Bash(adb devices *)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb kill-server *)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb start-server *)",
+      "Bash(flutter devices *)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb install *)",
+      "Bash(xxd)"
+    ]
+  }
+}
