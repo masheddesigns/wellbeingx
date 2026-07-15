@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:equatable/equatable.dart';
 
 import '../models/daily_stats.dart';
@@ -283,9 +285,10 @@ class SleepEngine {
     for (final b in bedtimes) {
       sumSq += (b - avg) * (b - avg);
     }
-    final stdDev = (sumSq / bedtimes.length).abs();
-    // 0 stdDev → 100. Above 90 minutes (8100) → 0.
-    final v = (1 - (stdDev / 8100)).clamp(0.0, 1.0);
+    final variance = sumSq / bedtimes.length;
+    final stdDev = math.sqrt(variance);
+    // 0 stdDev → 100. Above 90 minutes → 0.
+    final v = (1 - (stdDev / 90.0)).clamp(0.0, 1.0);
     return (v * 100).round();
   }
 }

@@ -37,11 +37,19 @@ class _AnimatedHeroState extends State<AnimatedHero>
   late final AnimationController _breath;
   late final AnimationController _tick; // 1s heartbeat
   Timer? _clockTicker;
-  DateTime _now = DateTime.now();
+  late final ValueNotifier<DateTime> _nowNotifier;
+  late HeroHeadline _headline;
+  late int _currentHour;
 
   @override
   void initState() {
     super.initState();
+    _nowNotifier = ValueNotifier<DateTime>(DateTime.now());
+    _currentHour = _nowNotifier.value.hour;
+    _headline = const HeadlineEngine().forToday(
+      today: widget.today,
+      yesterday: widget.yesterday,
+    );
     _count = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -61,8 +69,17 @@ class _AnimatedHeroState extends State<AnimatedHero>
     });
     _clockTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(() => _now = DateTime.now());
+      final now = DateTime.now();
+      _nowNotifier.value = now;
       _tick.forward(from: 0.92);
+      if (now.hour != _currentHour) {
+        _currentHour = now.hour;
+        _headline = const HeadlineEngine().forToday(
+          today: widget.today,
+          yesterday: widget.yesterday,
+        );
+        setState(() {}); // Re-evaluate headline and colors
+      }
     });
   }
 
@@ -72,11 +89,18 @@ class _AnimatedHeroState extends State<AnimatedHero>
     if (old.today.screenTime != widget.today.screenTime) {
       _count.forward(from: 0);
     }
+    if (old.today != widget.today || old.yesterday != widget.yesterday) {
+      _headline = const HeadlineEngine().forToday(
+        today: widget.today,
+        yesterday: widget.yesterday,
+      );
+    }
   }
 
   @override
   void dispose() {
     _clockTicker?.cancel();
+    _nowNotifier.dispose();
     _count.dispose();
     _breath.dispose();
     _tick.dispose();
@@ -85,8 +109,7 @@ class _AnimatedHeroState extends State<AnimatedHero>
 
   @override
   Widget build(BuildContext context) {
-    final headline = const HeadlineEngine()
-        .forToday(today: widget.today, yesterday: widget.yesterday);
+    final headline = _headline;
     final mood = _moodColor(headline.mood);
     final mins = widget.today.screenTime.inMinutes;
     final budget = 16 * 60; // assumed waking minutes
@@ -141,24 +164,34 @@ class _AnimatedHeroState extends State<AnimatedHero>
                 },
               ),
               const SizedBox(width: 8),
-              Text(
-                _eyebrow(),
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: mood,
-                  letterSpacing: 1.6,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _liveClock(),
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: WxColors.textMuted,
-                  letterSpacing: 1.0,
-                ),
+              ValueListenableBuilder<DateTime>(
+                valueListenable: _nowNotifier,
+                builder: (context, now, _) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _eyebrow(now),
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: mood,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _liveClock(now),
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: WxColors.textMuted,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const Spacer(),
               _Pill(label: _moodLabel(headline.mood), color: mood),
@@ -251,8 +284,8 @@ class _AnimatedHeroState extends State<AnimatedHero>
     );
   }
 
-  String _eyebrow() {
-    final h = _now.hour;
+  String _eyebrow(DateTime now) {
+    final h = now.hour;
     if (h < 5) return 'LATE NIGHT';
     if (h < 12) return 'THIS MORNING';
     if (h < 17) return 'THIS AFTERNOON';
@@ -260,12 +293,12 @@ class _AnimatedHeroState extends State<AnimatedHero>
     return 'TONIGHT';
   }
 
-  String _liveClock() {
-    final h = _now.hour == 0
+  String _liveClock(DateTime now) {
+    final h = now.hour == 0
         ? 12
-        : (_now.hour > 12 ? _now.hour - 12 : _now.hour);
-    final m = _now.minute.toString().padLeft(2, '0');
-    final ampm = _now.hour < 12 ? 'AM' : 'PM';
+        : (now.hour > 12 ? now.hour - 12 : now.hour);
+    final m = now.minute.toString().padLeft(2, '0');
+    final ampm = now.hour < 12 ? 'AM' : 'PM';
     return '$h:$m $ampm';
   }
 
@@ -407,14 +440,20 @@ class _BreathingRingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
     final c = size.center(Offset.zero);
     final r = math.min(size.width, size.height) / 2 - 14;
 
     // Outer breathing glow.
-    final glow = Paint()
-      ..color = accent.withValues(alpha: 0.10 + breath * 0.10)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 28 + breath * 12);
-    canvas.drawCircle(c, r + 4, glow);
+    final glowRadius = r + 4 + 28 + breath * 12;
+    if (glowRadius > 0) {
+      final baseColor = accent.withValues(alpha: 0.10 + breath * 0.10);
+      final glow = Paint()
+        ..shader = RadialGradient(
+          colors: <Color>[baseColor, baseColor.withValues(alpha: 0.0)],
+        ).createShader(Rect.fromCircle(center: c, radius: glowRadius));
+      canvas.drawCircle(c, glowRadius, glow);
+    }
 
     // Track.
     final track = Paint()
@@ -457,10 +496,16 @@ class _BreathingRingPainter extends CustomPainter {
       );
       final dotPaint = Paint()..color = accent;
       canvas.drawCircle(dot, 5, dotPaint);
-      final halo = Paint()
-        ..color = accent.withValues(alpha: 0.45)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-      canvas.drawCircle(dot, 8, halo);
+      
+      final haloRadius = 8.0 + 10.0;
+      final haloPaint = Paint()
+        ..shader = RadialGradient(
+          colors: <Color>[
+            accent.withValues(alpha: 0.45),
+            accent.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromCircle(center: dot, radius: haloRadius));
+      canvas.drawCircle(dot, haloRadius, haloPaint);
     }
   }
 

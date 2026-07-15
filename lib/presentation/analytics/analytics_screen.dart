@@ -12,6 +12,7 @@ import '../../domain/engines/analytics_engine.dart';
 import '../../domain/engines/behavior_engine.dart';
 import '../../domain/engines/notification_intelligence.dart';
 import '../../domain/models/daily_stats.dart';
+import '../dashboard/dashboard_state.dart';
 import '../dashboard/widgets/category_breakdown.dart';
 import '../dashboard/widgets/hour_heatmap.dart';
 import '../dashboard/widgets/weekday_weekend_card.dart';
@@ -36,7 +37,7 @@ class _AnalyticsView {
 
 final _analyticsProvider = FutureProvider<_AnalyticsView>((ref) async {
   final repo = ref.watch(usageRepositoryProvider);
-  final last14 = await repo.rangeStats(14);
+  final last14 = await ref.watch(last14DaysProvider.future);
   final summary = const AnalyticsEngine().summarize(
     currentWeek: last14.sublist(7),
     previousWeek: last14.sublist(0, 7),

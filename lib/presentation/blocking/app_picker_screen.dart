@@ -189,9 +189,8 @@ class _AppPickerScreenState extends ConsumerState<AppPickerScreen> {
     final repo = ref.read(blockingRepositoryProvider);
     final until =
         _duration == null ? null : DateTime.now().add(_duration!);
-    for (final pkg in _selected) {
-      await repo.setRule(packageName: pkg, mode: _mode, until: until);
-    }
+    await Future.wait(_selected.map((pkg) =>
+        repo.setRule(packageName: pkg, mode: _mode, until: until)));
     if (!mounted) return;
     ref.invalidate(activeBlockRulesProvider);
     context.pop();

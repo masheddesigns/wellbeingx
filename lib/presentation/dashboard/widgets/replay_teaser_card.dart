@@ -160,14 +160,20 @@ class _OrbPainter extends CustomPainter {
   final double t;
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
     final c = size.center(Offset.zero);
     final r = size.width / 2;
 
-    final glow = Paint()
-      ..color = WxColors.cyan
-          .withValues(alpha: 0.4 + 0.2 * math.sin(t * 2 * math.pi))
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
-    canvas.drawCircle(c, r - 4, glow);
+    final glowRadius = r - 4 + 14;
+    if (glowRadius > 0) {
+      final glowColor = WxColors.cyan
+          .withValues(alpha: 0.4 + 0.2 * math.sin(t * 2 * math.pi));
+      final glow = Paint()
+        ..shader = RadialGradient(
+          colors: <Color>[glowColor, glowColor.withValues(alpha: 0.0)],
+        ).createShader(Rect.fromCircle(center: c, radius: glowRadius));
+      canvas.drawCircle(c, glowRadius, glow);
+    }
 
     final body = Paint()
       ..shader = const LinearGradient(

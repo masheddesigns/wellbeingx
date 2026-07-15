@@ -102,15 +102,24 @@ class FadeRise extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final totalDuration = duration + delay;
+    final delayMs = delay.inMilliseconds;
+    final totalMs = totalDuration.inMilliseconds;
+    final durationMs = duration.inMilliseconds;
+
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
-      duration: duration,
-      curve: Curves.easeOutCubic,
-      builder: (_, t, __) {
+      duration: totalDuration,
+      curve: Curves.linear, // Use linear here so we can apply easeOutCubic curve manually on the active range
+      builder: (_, raw, __) {
+        final t = totalMs == 0 || durationMs == 0
+            ? 1.0
+            : ((raw * totalMs - delayMs) / durationMs).clamp(0.0, 1.0);
+        final eased = Curves.easeOutCubic.transform(t);
         return Opacity(
-          opacity: t,
+          opacity: eased,
           child: Transform.translate(
-            offset: Offset(0, (1 - t) * distance),
+            offset: Offset(0, (1 - eased) * distance),
             child: child,
           ),
         );

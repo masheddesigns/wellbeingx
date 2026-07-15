@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/adaptive_palette.dart';
 import '../../core/services/diagnostics.dart';
 import '../../core/services/native_bridge.dart';
+import '../../core/services/onboarding_service.dart';
 import '../../data/repositories/focus_repository.dart';
 import '../../data/repositories/gamification_repository.dart';
 import '../../data/repositories/usage_repository.dart';
@@ -60,41 +61,60 @@ class DashboardSnapshot extends Equatable {
 
   @override
   List<Object?> get props => <Object?>[
-        today,
-        last7Days,
-        previous7Days,
-        summary,
-        behavior,
-        scores,
-        gami,
-        insights,
-        recommendations,
-        unusedAppNames,
-        opener,
-        milestones,
-        personality,
-        palette,
-        ingesting,
-      ];
+    today,
+    last7Days,
+    previous7Days,
+    summary,
+    behavior,
+    scores,
+    gami,
+    insights,
+    recommendations,
+    unusedAppNames,
+    opener,
+    milestones,
+    personality,
+    palette,
+    ingesting,
+  ];
 }
 
 final ingestingProvider = StateProvider<bool>((_) => false);
 
 /// Last successful ingest timestamp (epoch ms). 0 = never.
-final lastIngestProvider = StateProvider<int>((_) => 0);
+final lastIngestProvider = StateProvider<int>((ref) {
+  return ref.watch(sharedPrefsProvider).getInt('last_ingest_timestamp') ?? 0;
+});
+
+final last14DaysProvider = FutureProvider<List<DailyStats>>((ref) async {
+  ref.watch(lastIngestProvider);
+  final usage = ref.watch(usageRepositoryProvider);
+  return usage.rangeStats(14);
+});
+
+final last30DaysProvider = FutureProvider<List<DailyStats>>((ref) async {
+  ref.watch(lastIngestProvider);
+  final usage = ref.watch(usageRepositoryProvider);
+  return usage.rangeStats(30);
+});
 
 final dashboardProvider = FutureProvider<DashboardSnapshot>((ref) async {
   final usage = ref.watch(usageRepositoryProvider);
   final gamiRepo = ref.watch(gamificationRepositoryProvider);
   final focusRepo = ref.watch(focusRepositoryProvider);
 
-  final last14 = await usage.rangeStats(14);
+  final last14Future = ref.watch(last14DaysProvider.future);
+  final unusedFuture = usage.unusedApps();
+  final gamiFuture = gamiRepo.read();
+  final weeklyFocusFuture = focusRepo.totalCompletedThisWeek();
+
+  final last14 = await last14Future;
   final previous = last14.sublist(0, 7);
   final current = last14.sublist(7);
   final today = current.last;
-  final unused = await usage.unusedApps();
-  final gami = await gamiRepo.read();
-  final weeklyFocus = await focusRepo.totalCompletedThisWeek();
+  final unused = await unusedFuture;
+  final gami = await gamiFuture;
+  final weeklyFocus = await weeklyFocusFuture;
   final summary = const AnalyticsEngine().summarize(
     currentWeek: current,
     previousWeek: previous,
@@ -173,10 +193,17 @@ ScoreBand _worstBand(List<CompositeScore> scores) {
   return worst;
 }
 
-Future<void> runBackgroundIngest(WidgetRef ref) async {
+Future<void> runBackgroundIngest(WidgetRef ref, {bool force = false}) async {
   if (ref.read(ingestingProvider)) return;
   final usage = ref.read(usageRepositoryProvider);
   final native = ref.read(nativeBridgeProvider);
+  final prefs = ref.read(sharedPrefsProvider);
+  final lastIngestMs = prefs.getInt('last_ingest_timestamp') ?? 0;
+
+  if (!force && !_isAutoIngestDue(lastIngestMs)) {
+    WxLog.info('ingest', 'skipped: recent sync');
+    return;
+  }
 
   bool hasUsage = false;
   try {
@@ -192,9 +219,14 @@ Future<void> runBackgroundIngest(WidgetRef ref) async {
   ref.read(ingestingProvider.notifier).state = true;
   WxLog.info('ingest', 'started');
   try {
-    await usage.ingest();
-    ref.read(lastIngestProvider.notifier).state =
-        DateTime.now().millisecondsSinceEpoch;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    final start = _ingestStart(lastIngestMs);
+
+    WxLog.info('ingest', 'ingesting from ${start.toIso8601String()}');
+    await usage.ingest(from: start);
+    await prefs.setInt('last_ingest_timestamp', nowMs);
+    ref.read(lastIngestProvider.notifier).state = nowMs;
     WxLog.info('ingest', 'completed');
   } catch (e, st) {
     WxLog.error('ingest', 'failed', e, st);
@@ -205,4 +237,23 @@ Future<void> runBackgroundIngest(WidgetRef ref) async {
     // contributing to navigator key collisions.
     ref.read(ingestingProvider.notifier).state = false;
   }
+}
+
+bool _isAutoIngestDue(int lastIngestMs) {
+  if (lastIngestMs <= 0) return true;
+  final elapsedMs = DateTime.now().millisecondsSinceEpoch - lastIngestMs;
+  return elapsedMs >= const Duration(minutes: 10).inMilliseconds;
+}
+
+DateTime _ingestStart(int lastIngestMs) {
+  final now = DateTime.now();
+  if (lastIngestMs <= 0) {
+    return now.subtract(const Duration(days: 3));
+  }
+
+  final overlapStart = DateTime.fromMillisecondsSinceEpoch(
+    lastIngestMs,
+  ).subtract(const Duration(hours: 2));
+  final oldestAllowed = now.subtract(const Duration(days: 2));
+  return overlapStart.isAfter(oldestAllowed) ? overlapStart : oldestAllowed;
 }

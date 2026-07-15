@@ -86,11 +86,12 @@ class _ScenePlayerState extends State<_ScenePlayer>
   bool _holding = false;
   Timer? _holdTimer;
 
-  List<_Scene> get _scenes => _buildScenes(widget.narrative);
+  late List<_Scene> _scenes;
 
   @override
   void initState() {
     super.initState();
+    _scenes = _buildScenes(widget.narrative);
     _pageCtrl = PageController();
     final tempo = _moodTempo(widget.narrative.mood);
     _ambient = AnimationController(vsync: this, duration: tempo)..repeat();
@@ -107,13 +108,18 @@ class _ScenePlayerState extends State<_ScenePlayer>
           _entry.forward(from: 0);
         }
       });
-    _threshold.addListener(() {
-      if (mounted) setState(() {});
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Haptics.light();
       _threshold.forward();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ScenePlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.narrative != widget.narrative) {
+      _scenes = _buildScenes(widget.narrative);
+    }
   }
 
   @override
@@ -172,16 +178,10 @@ class _ScenePlayerState extends State<_ScenePlayer>
     final media = MediaQuery.of(context);
     final palette = _palettesByMood[widget.narrative.mood]!;
 
-    final th = _threshold.value;
-    // Scene player visibility ramp: invisible until 60% of the threshold, then
-    // eases in. While < 1.0 the threshold orb dominates the canvas.
-    final playerOpacity = th < 0.6 ? 0.0 : ((th - 0.6) / 0.4).clamp(0.0, 1.0);
-    final thresholdOpacity = (1.0 - th).clamp(0.0, 1.0);
-
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapUp: (d) {
-        if (th < 1.0) return; // ignore taps during threshold opener
+        if (_threshold.value < 1.0) return; // ignore taps during threshold opener
         // Tap zones: left third = prev, right third = next, center = nothing.
         // The user paces. The app waits.
         final w = media.size.width;
@@ -208,46 +208,60 @@ class _ScenePlayerState extends State<_ScenePlayer>
             ),
           ),
           // Scenes — opacity-gated by the threshold opener.
-          Opacity(
-            opacity: playerOpacity,
-            child: IgnorePointer(
-              ignoring: th < 1.0,
-              child: PageView.builder(
-                controller: _pageCtrl,
-                physics: _holding
-                    ? const NeverScrollableScrollPhysics()
-                    : const BouncingScrollPhysics(),
-                onPageChanged: _onPageChanged,
-                itemCount: scenes.length,
-                itemBuilder: (_, i) {
-                  final scene = scenes[i];
-                  return AnimatedBuilder(
-                    animation: _entry,
-                    builder: (_, __) => _FogEmerge(
-                      progress: i == _index ? _entry.value : 1.0,
-                      child: scene.builder(
-                        context,
-                        i == _index ? _entry.value : 1.0,
-                        palette,
-                        widget.narrative,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
+          AnimatedBuilder(
+            animation: _threshold,
+            builder: (context, _) {
+              final th = _threshold.value;
+              final playerOpacity = th < 0.6 ? 0.0 : ((th - 0.6) / 0.4).clamp(0.0, 1.0);
+              return Opacity(
+                opacity: playerOpacity,
+                child: IgnorePointer(
+                  ignoring: th < 1.0,
+                  child: PageView.builder(
+                    controller: _pageCtrl,
+                    physics: _holding
+                        ? const NeverScrollableScrollPhysics()
+                        : const BouncingScrollPhysics(),
+                    onPageChanged: _onPageChanged,
+                    itemCount: scenes.length,
+                    itemBuilder: (_, i) {
+                      final scene = scenes[i];
+                      return AnimatedBuilder(
+                        animation: _entry,
+                        builder: (_, __) => _FogEmerge(
+                          progress: i == _index ? _entry.value : 1.0,
+                          child: scene.builder(
+                            context,
+                            i == _index ? _entry.value : 1.0,
+                            palette,
+                            widget.narrative,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
           ),
           // Threshold opener — emerging orb, mood label, then dissolves.
-          if (thresholdOpacity > 0.0)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: _ThresholdOpener(
-                  progress: th,
-                  palette: palette,
-                  mood: widget.narrative.mood,
+          AnimatedBuilder(
+            animation: _threshold,
+            builder: (context, _) {
+              final th = _threshold.value;
+              final thresholdOpacity = (1.0 - th).clamp(0.0, 1.0);
+              if (thresholdOpacity <= 0.0) return const SizedBox.shrink();
+              return Positioned.fill(
+                child: IgnorePointer(
+                  child: _ThresholdOpener(
+                    progress: th,
+                    palette: palette,
+                    mood: widget.narrative.mood,
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
+          ),
           // Top chrome — close button only. No progress count, no segmented
           // rail. Length is intentionally ambiguous; the user shouldn't know
           // whether one scene remains or five.
@@ -1754,13 +1768,10 @@ class _AmbientPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
     final intensity = _intensityFor(mood);
     final theta = t * 2 * math.pi;
 
-    final blob1 = Paint()
-      ..maskFilter =
-          MaskFilter.blur(BlurStyle.normal, 90 - intensity * 35)
-      ..color = palette.glow.withValues(alpha: 0.10 + intensity * 0.06);
     // Micro-jitter: faint high-frequency components break the mathematical
     // smoothness. Should feel like something moved that shouldn't have, not
     // like animation. Stops the orb from feeling like a screensaver.
@@ -1776,12 +1787,15 @@ class _AmbientPainter extends CustomPainter {
             0.06 * math.sin(theta * _r2) +
             0.04 * math.cos(theta * _r3) +
             jitter1y);
-    canvas.drawCircle(Offset(cx1, cy1), size.width * 0.55, blob1);
+    
+    final r1 = size.width * 0.85;
+    final c1 = palette.glow.withValues(alpha: 0.10 + intensity * 0.06);
+    final blob1 = Paint()
+      ..shader = RadialGradient(
+        colors: <Color>[c1, c1.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromCircle(center: Offset(cx1, cy1), radius: r1));
+    canvas.drawCircle(Offset(cx1, cy1), r1, blob1);
 
-    final blob2 = Paint()
-      ..maskFilter =
-          MaskFilter.blur(BlurStyle.normal, 100 - intensity * 30)
-      ..color = palette.shadow.withValues(alpha: 0.08 + intensity * 0.05);
     final jitter2x = 0.014 * math.sin(theta * 5.9 + 2.3);
     final jitter2y = 0.009 * math.cos(theta * 8.1 + 1.7);
     final cx2 = size.width *
@@ -1794,18 +1808,29 @@ class _AmbientPainter extends CustomPainter {
             0.07 * math.sin(theta * _r3 + 0.4) +
             0.03 * math.cos(theta * _r2 + 0.9) +
             jitter2y);
-    canvas.drawCircle(Offset(cx2, cy2), size.width * 0.6, blob2);
+
+    final r2 = size.width * 0.90;
+    final c2 = palette.shadow.withValues(alpha: 0.08 + intensity * 0.05);
+    final blob2 = Paint()
+      ..shader = RadialGradient(
+        colors: <Color>[c2, c2.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromCircle(center: Offset(cx2, cy2), radius: r2));
+    canvas.drawCircle(Offset(cx2, cy2), r2, blob2);
 
     // Third faint blob — slow, large, opposite phase. Adds atmospheric depth
     // without making motion feel busy.
-    final blob3 = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 120)
-      ..color = palette.glow.withValues(alpha: 0.04 + intensity * 0.03);
     final cx3 = size.width *
         (0.5 + 0.18 * math.sin(theta * _r2 * 0.5 + 2.1));
     final cy3 = size.height *
         (0.5 + 0.22 * math.cos(theta * _r3 * 0.5 + 1.3));
-    canvas.drawCircle(Offset(cx3, cy3), size.width * 0.7, blob3);
+
+    final r3 = size.width * 1.05;
+    final c3 = palette.glow.withValues(alpha: 0.04 + intensity * 0.03);
+    final blob3 = Paint()
+      ..shader = RadialGradient(
+        colors: <Color>[c3, c3.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromCircle(center: Offset(cx3, cy3), radius: r3));
+    canvas.drawCircle(Offset(cx3, cy3), r3, blob3);
   }
 
   double _intensityFor(WeekMood m) {

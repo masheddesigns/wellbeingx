@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/diagnostics.dart';
 import '../../core/services/native_bridge.dart';
 import '../../core/utils/date_utils.dart';
 import '../../domain/models/app_category.dart';
@@ -556,6 +557,19 @@ class UsageRepository {
   }
 
   Future<void> _refreshAppMeta() async {
+    const lastCheckKey = 'app_meta.last_check';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final row = await (_db.select(_db.keyValues)
+          ..where((t) => t.key.equals(lastCheckKey)))
+        .getSingleOrNull();
+    if (row != null) {
+      final lastChecked = int.tryParse(row.value) ?? 0;
+      if (now - lastChecked < const Duration(hours: 24).inMilliseconds) {
+        WxLog.info('app-meta', 'skipped refresh: last checked less than 24h ago');
+        return;
+      }
+    }
+
     final apps = await _native.listInstalledApps();
     if (apps.isEmpty) return;
     await _db.batch((b) {
@@ -580,28 +594,25 @@ class UsageRepository {
         );
       }
     });
+
+    await _db.into(_db.keyValues).insert(
+          KeyValuesCompanion.insert(
+            key: lastCheckKey,
+            value: now.toString(),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
   }
 
   // -------------------- Read API --------------------
 
-  Future<DailyStats> dayStats(DateTime day) async {
-    final dayEpoch = WxDates.dayEpoch(day);
-    final phone = await (_db.select(
-      _db.dailyPhone,
-    )..where((t) => t.dayEpoch.equals(dayEpoch))).getSingleOrNull();
-    final aggs =
-        await (_db.select(_db.dailyAggregates)
-              ..where((t) => t.dayEpoch.equals(dayEpoch))
-              ..orderBy([(t) => OrderingTerm.desc(t.foregroundMs)]))
-            .get();
-    final hours = await (_db.select(
-      _db.hourBuckets,
-    )..where((t) => t.dayEpoch.equals(dayEpoch))).get();
-    final metas = await _db.select(_db.appMeta).get();
-    final metaByPkg = <String, AppMetaRow>{
-      for (final m in metas) m.packageName: m,
-    };
-
+  DailyStats _assembleStats({
+    required DateTime day,
+    required DailyPhoneRow? phone,
+    required List<DailyAggRow> aggs,
+    required List<HourBucketRow> hours,
+    required Map<String, AppMetaRow> metaByPkg,
+  }) {
     final apps = aggs
         .map((a) {
           final m = metaByPkg[a.packageName];
@@ -652,11 +663,76 @@ class UsageRepository {
     );
   }
 
+  Future<DailyStats> dayStats(DateTime day) async {
+    final dayEpoch = WxDates.dayEpoch(day);
+    final phone = await (_db.select(
+      _db.dailyPhone,
+    )..where((t) => t.dayEpoch.equals(dayEpoch))).getSingleOrNull();
+    final aggs =
+        await (_db.select(_db.dailyAggregates)
+              ..where((t) => t.dayEpoch.equals(dayEpoch))
+              ..orderBy([(t) => OrderingTerm.desc(t.foregroundMs)]))
+            .get();
+    final hours = await (_db.select(
+      _db.hourBuckets,
+    )..where((t) => t.dayEpoch.equals(dayEpoch))).get();
+    final metas = await _db.select(_db.appMeta).get();
+    final metaByPkg = <String, AppMetaRow>{
+      for (final m in metas) m.packageName: m,
+    };
+
+    return _assembleStats(
+      day: day,
+      phone: phone,
+      aggs: aggs,
+      hours: hours,
+      metaByPkg: metaByPkg,
+    );
+  }
+
   Future<List<DailyStats>> rangeStats(int days) async {
     final today = DateTime.now();
+    final startEpoch = WxDates.dayEpoch(today.subtract(Duration(days: days - 1)));
+    final endEpoch = WxDates.dayEpoch(today);
+
+    final phones = await (_db.select(_db.dailyPhone)
+          ..where((t) => t.dayEpoch.isBetweenValues(startEpoch, endEpoch)))
+        .get();
+    final aggs = await (_db.select(_db.dailyAggregates)
+          ..where((t) => t.dayEpoch.isBetweenValues(startEpoch, endEpoch))
+          ..orderBy([(t) => OrderingTerm.desc(t.foregroundMs)]))
+        .get();
+    final hours = await (_db.select(_db.hourBuckets)
+          ..where((t) => t.dayEpoch.isBetweenValues(startEpoch, endEpoch)))
+        .get();
+    final metas = await _db.select(_db.appMeta).get();
+
+    final metaByPkg = <String, AppMetaRow>{
+      for (final m in metas) m.packageName: m,
+    };
+    final phoneMap = <int, DailyPhoneRow>{
+      for (final p in phones) p.dayEpoch: p,
+    };
+    final aggsMap = <int, List<DailyAggRow>>{};
+    for (final a in aggs) {
+      aggsMap.putIfAbsent(a.dayEpoch, () => <DailyAggRow>[]).add(a);
+    }
+    final hoursMap = <int, List<HourBucketRow>>{};
+    for (final h in hours) {
+      hoursMap.putIfAbsent(h.dayEpoch, () => <HourBucketRow>[]).add(h);
+    }
+
     final out = <DailyStats>[];
     for (int i = days - 1; i >= 0; i--) {
-      out.add(await dayStats(today.subtract(Duration(days: i))));
+      final targetDay = today.subtract(Duration(days: i));
+      final epoch = WxDates.dayEpoch(targetDay);
+      out.add(_assembleStats(
+        day: targetDay,
+        phone: phoneMap[epoch],
+        aggs: aggsMap[epoch] ?? <DailyAggRow>[],
+        hours: hoursMap[epoch] ?? <HourBucketRow>[],
+        metaByPkg: metaByPkg,
+      ));
     }
     return out;
   }

@@ -4,14 +4,17 @@ class WxDates {
   WxDates._();
 
   static int dayEpoch(DateTime t) {
-    final d = DateTime(t.year, t.month, t.day);
+    final d = DateTime.utc(t.year, t.month, t.day);
     return d.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay;
   }
 
-  static DateTime fromDayEpoch(int e) =>
-      DateTime.fromMillisecondsSinceEpoch(e * Duration.millisecondsPerDay,
-          isUtc: true)
-          .toLocal();
+  static DateTime fromDayEpoch(int e) {
+    final d = DateTime.fromMillisecondsSinceEpoch(
+      e * Duration.millisecondsPerDay,
+      isUtc: true,
+    );
+    return DateTime(d.year, d.month, d.day);
+  }
 
   static DateTime startOfDay(DateTime t) => DateTime(t.year, t.month, t.day);
 
@@ -25,8 +28,7 @@ class WxDates {
 
   static DateTime startOfMonth(DateTime t) => DateTime(t.year, t.month, 1);
 
-  static String shortLabel(DateTime t) =>
-      DateFormat('EEE d MMM').format(t);
+  static String shortLabel(DateTime t) => DateFormat('EEE d MMM').format(t);
 
   static String dayShort(DateTime t) => DateFormat('EEE').format(t);
 
@@ -42,6 +44,9 @@ class WxDates {
 
   static List<int> last(int days, [DateTime? from]) {
     final base = from ?? DateTime.now();
-    return List<int>.generate(days, (i) => dayEpoch(base.subtract(Duration(days: days - 1 - i))));
+    return List<int>.generate(
+      days,
+      (i) => dayEpoch(base.subtract(Duration(days: days - 1 - i))),
+    );
   }
 }

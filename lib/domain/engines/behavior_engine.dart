@@ -221,7 +221,7 @@ class BehaviorEngine {
   /// Rule of thumb: each context switch eats ~23 min of refocus. We bound it to a daily cap.
   Duration _focusRecoveryTime(DailyStats day, int loops) {
     final switches = (day.shortUnlocks ~/ 3) + loops;
-    final mins = (switches * 23).clamp(0, 360);
+    final mins = (switches * 5).clamp(0, 360);
     return Duration(minutes: mins);
   }
 

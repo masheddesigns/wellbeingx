@@ -9,24 +9,18 @@ import '../../app/theme/typography.dart';
 import '../../core/services/haptics.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/duration_format.dart';
-import '../../data/repositories/usage_repository.dart';
 import '../../domain/models/daily_stats.dart';
 import '../dashboard/dashboard_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/section_header.dart';
 import '../shared/widgets/skeleton.dart';
 
-final _historyProvider = FutureProvider<List<DailyStats>>((ref) async {
-  ref.watch(lastIngestProvider);
-  return ref.watch(usageRepositoryProvider).rangeStats(30);
-});
-
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final history = ref.watch(_historyProvider);
+    final history = ref.watch(last30DaysProvider);
     return Scaffold(
       backgroundColor: WxColors.void_,
       body: SafeArea(

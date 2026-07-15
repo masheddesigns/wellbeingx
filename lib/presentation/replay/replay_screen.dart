@@ -58,7 +58,6 @@ class _ReplayBodyState extends State<_ReplayBody>
       vsync: this,
       duration: const Duration(seconds: 18),
     );
-    _ctrl.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _play();
     });
@@ -91,9 +90,6 @@ class _ReplayBodyState extends State<_ReplayBody>
 
   @override
   Widget build(BuildContext context) {
-    final t = _ctrl.value;
-    final hour = (t * 24).floor();
-    final fraction = (t * 24) - hour;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       child: Column(
@@ -122,54 +118,67 @@ class _ReplayBodyState extends State<_ReplayBody>
           const SizedBox(height: 8),
           // Hero clock + emerging-app block.
           Expanded(
-            child: Stack(
-              alignment: Alignment.center,
-              children: <Widget>[
-                _ParticleRing(
-                  progress: t,
-                  productivity: _productivityAt(widget.day, hour, fraction),
-                  distraction: _distractionAt(widget.day, hour, fraction),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
+            child: AnimatedBuilder(
+              animation: _ctrl,
+              builder: (context, _) {
+                final t = _ctrl.value;
+                final hour = (t * 24).floor();
+                final fraction = (t * 24) - hour;
+                return Stack(
+                  alignment: Alignment.center,
                   children: <Widget>[
-                    Text(
-                      _hourLabel(hour),
-                      style: WxTypography.mono(
-                          size: 56, weight: FontWeight.w800),
+                    _ParticleRing(
+                      progress: t,
+                      productivity: _productivityAt(widget.day, hour, fraction),
+                      distraction: _distractionAt(widget.day, hour, fraction),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _fragmentForHour(widget.day, hour),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: WxColors.textSecondary,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          _hourLabel(hour),
+                          style: WxTypography.mono(
+                              size: 56, weight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _fragmentForHour(widget.day, hour),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: WxColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: _AppRow(
+                        apps: _featuredAppsAt(widget.day, hour),
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: _AppRow(
-                    apps: _featuredAppsAt(widget.day, hour),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 12),
-          _ScrubberBar(
-            value: t,
-            day: widget.day,
-            onChanged: (v) {
-              _ctrl.stop();
-              setState(() {
-                _ctrl.value = v;
-                _playing = false;
-              });
+          AnimatedBuilder(
+            animation: _ctrl,
+            builder: (context, _) {
+              return _ScrubberBar(
+                value: _ctrl.value,
+                day: widget.day,
+                onChanged: (v) {
+                  _ctrl.stop();
+                  setState(() {
+                    _ctrl.value = v;
+                    _playing = false;
+                  });
+                },
+              );
             },
           ),
           const SizedBox(height: 10),
@@ -293,6 +302,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
     final c = size.center(Offset.zero);
     final radius = math.min(size.width, size.height) / 2 - 18;
     final track = Paint()
@@ -325,18 +335,28 @@ class _RingPainter extends CustomPainter {
 
     // Productivity halo (cyan inward).
     if (productivity > 0) {
-      final glow = Paint()
-        ..color = WxColors.accent
-            .withValues(alpha: (productivity.clamp(0, 1) * 0.4))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
-      canvas.drawCircle(c, radius - 30, glow);
+      final glowRadius = (radius - 30) + 24;
+      if (glowRadius > 0) {
+        final baseColor = WxColors.accent
+            .withValues(alpha: (productivity.clamp(0.0, 1.0) * 0.4));
+        final glow = Paint()
+          ..shader = RadialGradient(
+            colors: <Color>[baseColor, baseColor.withValues(alpha: 0.0)],
+          ).createShader(Rect.fromCircle(center: c, radius: glowRadius));
+        canvas.drawCircle(c, glowRadius, glow);
+      }
     }
     if (distraction > 0) {
-      final glow = Paint()
-        ..color = WxColors.crimson
-            .withValues(alpha: (distraction.clamp(0, 1) * 0.45))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 32);
-      canvas.drawCircle(c, radius - 18, glow);
+      final glowRadius = (radius - 18) + 32;
+      if (glowRadius > 0) {
+        final baseColor = WxColors.crimson
+            .withValues(alpha: (distraction.clamp(0.0, 1.0) * 0.45));
+        final glow = Paint()
+          ..shader = RadialGradient(
+            colors: <Color>[baseColor, baseColor.withValues(alpha: 0.0)],
+          ).createShader(Rect.fromCircle(center: c, radius: glowRadius));
+        canvas.drawCircle(c, glowRadius, glow);
+      }
     }
   }
 

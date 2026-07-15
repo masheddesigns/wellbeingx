@@ -141,9 +141,6 @@ class _ReplayPlayerState extends State<_ReplayPlayer>
       vsync: this,
       duration: const Duration(seconds: 8),
     )..repeat();
-    _chapterCtrl.addListener(() {
-      if (mounted) setState(() {});
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Haptics.replayControl();
       _startCurrent();
@@ -324,15 +321,20 @@ class _ReplayPlayerState extends State<_ReplayPlayer>
                             child: child,
                           ),
                         ),
-                        child: _ChapterStage(
+                        child: AnimatedBuilder(
                           key: ValueKey<int>(_index),
-                          chapter: _current,
-                          progress: _chapterCtrl.value,
-                          ambient: _ambientCtrl.value,
-                          today: widget.data.today,
-                          palette: palette,
-                          onShare: _share,
-                          isLast: _isLast,
+                          animation: _chapterCtrl,
+                          builder: (context, _) {
+                            return _ChapterStage(
+                              chapter: _current,
+                              progress: _chapterCtrl.value,
+                              ambient: _ambientCtrl.value,
+                              today: widget.data.today,
+                              palette: palette,
+                              onShare: _share,
+                              isLast: _isLast,
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -351,7 +353,6 @@ class _ReplayPlayerState extends State<_ReplayPlayer>
 
 class _ChapterStage extends StatelessWidget {
   const _ChapterStage({
-    super.key,
     required this.chapter,
     required this.progress,
     required this.ambient,
@@ -903,14 +904,21 @@ class _AmbientPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final theta = t * 2 * math.pi;
+    final radius = size.width * 0.45;
     for (int i = 0; i < 3; i++) {
       final phase = theta + i * (2 * math.pi / 3);
       final cx = size.width * (0.5 + 0.32 * math.cos(phase));
       final cy = size.height * (0.5 + 0.28 * math.sin(phase * 1.1));
+      final center = Offset(cx, cy);
+      final rect = Rect.fromCircle(center: center, radius: radius);
       final p = Paint()
-        ..color = color.withValues(alpha: 0.10)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 80);
-      canvas.drawCircle(Offset(cx, cy), size.width * 0.4, p);
+        ..shader = RadialGradient(
+          colors: <Color>[
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.0),
+          ],
+        ).createShader(rect);
+      canvas.drawCircle(center, radius, p);
     }
   }
 
@@ -926,6 +934,7 @@ class _SunPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
     final track = Paint()
       ..color = WxColors.surface3.withValues(alpha: 0.5)
       ..style = PaintingStyle.stroke
@@ -942,10 +951,14 @@ class _SunPainter extends CustomPainter {
     final sx = cx + r * math.cos(angle);
     final sy = cy + r * math.sin(angle);
 
+    final glowRadius = 14.0 + 18.0;
+    final baseColor = color.withValues(alpha: 0.7);
     final glow = Paint()
-      ..color = color.withValues(alpha: 0.7)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
-    canvas.drawCircle(Offset(sx, sy), 14, glow);
+      ..shader = RadialGradient(
+        colors: <Color>[baseColor, baseColor.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromCircle(center: Offset(sx, sy), radius: glowRadius));
+    canvas.drawCircle(Offset(sx, sy), glowRadius, glow);
+
     final body = Paint()..color = color;
     canvas.drawCircle(Offset(sx, sy), 8, body);
   }

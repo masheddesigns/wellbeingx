@@ -5,14 +5,14 @@ import 'package:intl/intl.dart';
 import '../../app/theme/colors.dart';
 import '../../app/theme/typography.dart';
 import '../../core/utils/duration_format.dart';
-import '../../data/repositories/usage_repository.dart';
 import '../../domain/engines/continuous_usage_engine.dart';
+import '../dashboard/dashboard_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/section_header.dart';
 import '../shared/widgets/skeleton.dart';
 
 final _continuousProvider = FutureProvider<ContinuousUsageReport>((ref) async {
-  final last30 = await ref.watch(usageRepositoryProvider).rangeStats(30);
+  final last30 = await ref.watch(last30DaysProvider.future);
   return const ContinuousUsageEngine().analyze(days: last30);
 });
 

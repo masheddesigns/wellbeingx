@@ -4,14 +4,14 @@ import 'package:intl/intl.dart';
 
 import '../../app/theme/colors.dart';
 import '../../app/theme/typography.dart';
-import '../../data/repositories/usage_repository.dart';
 import '../../domain/models/daily_stats.dart';
+import '../dashboard/dashboard_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/section_header.dart';
 import '../shared/widgets/skeleton.dart';
 
 final _unlockHistoryProvider = FutureProvider<List<DailyStats>>((ref) async {
-  return ref.watch(usageRepositoryProvider).rangeStats(30);
+  return ref.watch(last30DaysProvider.future);
 });
 
 class UnlockHistoryScreen extends ConsumerWidget {
@@ -54,20 +54,13 @@ class _Body extends StatelessWidget {
     // Hourly distribution across the window.
     final hourly = List<int>.filled(24, 0);
     for (final d in days) {
-      d.hourBuckets.forEach((h, _) {
-        // Approximation: short-unlocks are not split by hour, so use foreground
-        // as a proxy for "when in the day they were on the phone".
-      });
-    }
-    // Use today's hourly unlock approximation if available.
-    // Fallback: spread today's unlocks evenly across hours where there was foreground.
-    final todayHourTotal = today.hourBuckets.values
-        .fold<int>(0, (a, b) => a + b.inMinutes);
-    if (todayHourTotal > 0 && today.unlocks > 0) {
-      today.hourBuckets.forEach((h, dur) {
-        hourly[h] =
-            ((dur.inMinutes / todayHourTotal) * today.unlocks).round();
-      });
+      final dayHourTotal = d.hourBuckets.values
+          .fold<int>(0, (a, b) => a + b.inMinutes);
+      if (dayHourTotal > 0 && d.unlocks > 0) {
+        d.hourBuckets.forEach((h, dur) {
+          hourly[h] += ((dur.inMinutes / dayHourTotal) * d.unlocks).round();
+        });
+      }
     }
     final maxHour =
         hourly.fold<int>(0, (a, b) => b > a ? b : a);

@@ -194,7 +194,7 @@ class CompositeScoresEngine {
         band: ScoreBand.calm,
       );
     }
-    final top = today.apps.first;
+    final top = today.apps.reduce((a, b) => a.foreground >= b.foreground ? a : b);
     final share = today.screenTime.inMinutes == 0
         ? 0
         : ((top.foreground.inMinutes / today.screenTime.inMinutes) * 100)
@@ -220,7 +220,8 @@ class CompositeScoresEngine {
 
   int _dependencyFor(DailyStats d) {
     if (d.apps.isEmpty || d.screenTime.inMinutes == 0) return 0;
-    return ((d.apps.first.foreground.inMinutes / d.screenTime.inMinutes) * 100)
+    final top = d.apps.reduce((a, b) => a.foreground >= b.foreground ? a : b);
+    return ((top.foreground.inMinutes / d.screenTime.inMinutes) * 100)
         .round();
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:wellbeingx/core/utils/date_utils.dart';
 import 'package:wellbeingx/core/utils/duration_format.dart';
 import 'package:wellbeingx/domain/engines/analytics_engine.dart';
 import 'package:wellbeingx/domain/models/daily_stats.dart';
@@ -20,5 +21,12 @@ void main() {
     expect(summary.weekTotal, Duration.zero);
     expect(summary.growthPct, 0);
     expect(summary.topApps, isEmpty);
+  });
+
+  test('Day epochs round-trip to the same local calendar day', () {
+    final source = DateTime(2026, 7, 15, 14, 30);
+    final restored = WxDates.fromDayEpoch(WxDates.dayEpoch(source));
+
+    expect(restored, DateTime(2026, 7, 15));
   });
 }

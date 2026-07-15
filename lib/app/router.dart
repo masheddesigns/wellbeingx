@@ -43,10 +43,12 @@ import '../presentation/shell/app_shell.dart';
 import '../presentation/wellness/mood_screen.dart';
 import '../domain/models/app_category.dart';
 
-final GlobalKey<NavigatorState> _rootKey =
-    GlobalKey<NavigatorState>(debugLabel: 'wx-root');
-final GlobalKey<NavigatorState> _shellKey =
-    GlobalKey<NavigatorState>(debugLabel: 'wx-shell');
+final GlobalKey<NavigatorState> _rootKey = GlobalKey<NavigatorState>(
+  debugLabel: 'wx-root',
+);
+final GlobalKey<NavigatorState> _shellKey = GlobalKey<NavigatorState>(
+  debugLabel: 'wx-shell',
+);
 
 /// Non-shell screens use the root navigator (full-screen, no bottom nav).
 GoRoute _root(String path, Widget Function() build) {
@@ -84,7 +86,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/insights-hub',
-            builder: (context, state) => const NarrativeInsightsScreen(),
+            builder: (context, state) => const InsightsHubScreen(),
           ),
           GoRoute(
             path: '/profile',
@@ -109,9 +111,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root('/achievements', () => const AchievementsScreen()),
       _root('/insights', () => const InsightsScreen()),
       _root('/insights-classic', () => const InsightsHubScreen()),
+      _root('/insights-narrative', () => const NarrativeInsightsScreen()),
       _root('/recommendations', () => const RecommendationsScreen()),
-      _root('/notification-intel',
-          () => const NotificationIntelligenceScreen()),
+      _root(
+        '/notification-intel',
+        () => const NotificationIntelligenceScreen(),
+      ),
       _root('/personality', () => const PersonalityScreen()),
       _root('/ghost-reveal', () => const GhostRevealScreen()),
       _root('/mood', () => const MoodScreen()),
@@ -130,9 +135,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final pkg = Uri.decodeComponent(state.pathParameters['pkg'] ?? '');
           final name = Uri.decodeComponent(
-              state.uri.queryParameters['name'] ?? pkg);
-          final cat =
-              AppCategory.fromCode(state.uri.queryParameters['cat']);
+            state.uri.queryParameters['name'] ?? pkg,
+          );
+          final cat = AppCategory.fromCode(state.uri.queryParameters['cat']);
           return AppDetailsScreen(
             packageName: pkg,
             displayName: name,

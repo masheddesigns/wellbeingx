@@ -42,12 +42,9 @@ class _WellbeingXAppState extends ConsumerState<WellbeingXApp> {
         WxLog.error('native-events', 'stream error', e, st);
       },
     );
-    // Cold-start ingest. Fires as soon as the app process is ready, regardless
-    // of which route the user lands on. The dashboard's own post-frame ingest
-    // is still there for when the user pulls to refresh.
+    // Cold-start maintenance. Keep expensive usage ingestion out of the first
+    // frame so the dashboard can render before Android UsageStats work begins.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Schedule the daily 9pm Replay reminder once at app start. Idempotent.
-      unawaited(ReplayReminderService.scheduleDaily9pm());
       try {
         final drained = await ref
             .read(usageRepositoryProvider)
@@ -57,25 +54,18 @@ class _WellbeingXAppState extends ConsumerState<WellbeingXApp> {
           WxLog.info('notifications', 'drained $drained pending events');
         }
 
-        final native = ref.read(nativeBridgeProvider);
-        final hasUsage = await native.hasUsageAccess();
-        if (!hasUsage) {
-          WxLog.warn('cold-start', 'no usage access');
-          return;
-        }
-        if (ref.read(ingestingProvider)) return;
-        ref.read(ingestingProvider.notifier).state = true;
-        WxLog.info('cold-start', 'forced ingest');
-        try {
-          await ref.read(usageRepositoryProvider).ingest();
-          ref.read(lastIngestProvider.notifier).state =
-              DateTime.now().millisecondsSinceEpoch;
-          WxLog.info('cold-start', 'ingest done');
-        } catch (e, st) {
-          WxLog.error('cold-start', 'ingest failed', e, st);
-        } finally {
-          ref.read(ingestingProvider.notifier).state = false;
-        }
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 8), () {
+            if (!mounted) return Future<void>.value();
+            return runBackgroundIngest(ref);
+          }),
+        );
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 5), () {
+            if (!mounted) return Future<void>.value();
+            return ReplayReminderService.scheduleDaily9pm();
+          }),
+        );
       } catch (e, st) {
         WxLog.error('cold-start', 'unexpected', e, st);
       }

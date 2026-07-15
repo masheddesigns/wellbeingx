@@ -15,6 +15,7 @@ class FocusState {
   final FocusPhase phase;
   final Duration planned;
   final Duration remaining;
+  final Duration workLength;
   final Duration shortBreakLength;
   final Duration longBreakLength;
   final int completedPomodoros;
@@ -30,6 +31,7 @@ class FocusState {
     required this.phase,
     required this.planned,
     required this.remaining,
+    required this.workLength,
     required this.shortBreakLength,
     required this.longBreakLength,
     required this.completedPomodoros,
@@ -48,6 +50,7 @@ class FocusState {
       phase: FocusPhase.idle,
       planned: p.work,
       remaining: p.work,
+      workLength: p.work,
       shortBreakLength: p.shortBreak,
       longBreakLength: p.longBreak,
       completedPomodoros: 0,
@@ -65,6 +68,7 @@ class FocusState {
     FocusPhase? phase,
     Duration? planned,
     Duration? remaining,
+    Duration? workLength,
     Duration? shortBreakLength,
     Duration? longBreakLength,
     int? completedPomodoros,
@@ -83,6 +87,7 @@ class FocusState {
         phase: phase ?? this.phase,
         planned: planned ?? this.planned,
         remaining: remaining ?? this.remaining,
+        workLength: workLength ?? this.workLength,
         shortBreakLength: shortBreakLength ?? this.shortBreakLength,
         longBreakLength: longBreakLength ?? this.longBreakLength,
         completedPomodoros: completedPomodoros ?? this.completedPomodoros,
@@ -296,8 +301,8 @@ class FocusController extends Notifier<FocusState> {
       state = state.copyWith(
         phase: FocusPhase.work,
         running: false,
-        planned: const Duration(minutes: 25),
-        remaining: const Duration(minutes: 25),
+        planned: state.workLength,
+        remaining: state.workLength,
       );
     } else {
       state = FocusState.idle();

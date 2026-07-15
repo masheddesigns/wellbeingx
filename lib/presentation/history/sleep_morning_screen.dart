@@ -4,15 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/colors.dart';
 import '../../app/theme/typography.dart';
 import '../../core/utils/duration_format.dart';
-import '../../data/repositories/usage_repository.dart';
 import '../../domain/engines/sleep_engine.dart';
+import '../dashboard/dashboard_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/section_header.dart';
 import '../shared/widgets/skeleton.dart';
 
 final _sleepProvider =
     FutureProvider<({SleepReport report, List<DateTime> days})>((ref) async {
-      final last14 = await ref.watch(usageRepositoryProvider).rangeStats(14);
+      final last14 = await ref.watch(last14DaysProvider.future);
       final report = const SleepEngine().analyze(last14Days: last14);
       return (report: report, days: last14.map((d) => d.day).toList());
     });

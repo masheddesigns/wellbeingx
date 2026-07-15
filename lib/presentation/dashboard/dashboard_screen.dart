@@ -29,11 +29,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     // Permission refresh + first ingest happen at the shell level (see
-    // [_AppShellState]). The dashboard just kicks one extra ingest on first
-    // mount so the very first frame isn't waiting on the periodic ticker.
+    // [_AppShellState]) and app boot. Keep this screen's first frame focused on
+    // rendering; background ingest is triggered elsewhere.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(permissionsProvider.notifier).refresh();
-      runBackgroundIngest(ref);
     });
   }
 
@@ -50,7 +49,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           onRefresh: () async {
             Haptics.pullRefresh();
             ref.invalidate(dashboardProvider);
-            await runBackgroundIngest(ref);
+            await runBackgroundIngest(ref, force: true);
           },
           color: WxColors.accent,
           backgroundColor: WxColors.surface1,
@@ -58,7 +57,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
             physics: const AlwaysScrollableScrollPhysics(),
             children: <Widget>[
-              _GreetingHeader(streak: dash.asData?.value.gami.currentStreak ?? 0),
+              _GreetingHeader(
+                streak: dash.asData?.value.gami.currentStreak ?? 0,
+              ),
               const SizedBox(height: 16),
               if (!perms.usageAccess) const _UsageAccessNudge(),
               if (install.ghostMode &&
@@ -98,12 +99,12 @@ class _GreetingHeader extends ConsumerWidget {
     final greeting = hour < 5
         ? 'Late night.'
         : hour < 12
-            ? 'Good morning.'
-            : hour < 17
-                ? 'Good afternoon.'
-                : hour < 22
-                    ? 'Good evening.'
-                    : 'Wind down.';
+        ? 'Good morning.'
+        : hour < 17
+        ? 'Good afternoon.'
+        : hour < 22
+        ? 'Good evening.'
+        : 'Wind down.';
     final lastIngest = ref.watch(lastIngestProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -138,7 +139,7 @@ class _GreetingHeader extends ConsumerWidget {
             tooltip: 'Refresh',
             onPressed: () {
               Haptics.tap();
-              runBackgroundIngest(ref);
+              runBackgroundIngest(ref, force: true);
             },
             icon: const Icon(Icons.refresh),
             color: WxColors.textMuted,
@@ -182,7 +183,10 @@ class _UsageAccessNudge extends ConsumerWidget {
                   SizedBox(height: 3),
                   Text(
                     'Tap to grant — without it your stats stay empty.',
-                    style: TextStyle(fontSize: 12, color: WxColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: WxColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -210,7 +214,8 @@ class _IngestBadge extends StatelessWidget {
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
-                strokeWidth: 2, color: WxColors.cyan,
+                strokeWidth: 2,
+                color: WxColors.cyan,
               ),
             ),
             SizedBox(width: 12),
@@ -268,11 +273,7 @@ class _DashboardBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        AnimatedHero(
-          today: today,
-          yesterday: yesterday,
-          palette: snap.palette,
-        ),
+        AnimatedHero(today: today, yesterday: yesterday, palette: snap.palette),
         const SizedBox(height: 14),
         const _DailyRewardCallout(),
         if (snap.milestones.isNotEmpty) ...<Widget>[
@@ -467,10 +468,7 @@ class _ErrorState extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             message,
-            style: const TextStyle(
-              fontSize: 12,
-              color: WxColors.textSecondary,
-            ),
+            style: const TextStyle(fontSize: 12, color: WxColors.textSecondary),
           ),
         ],
       ),

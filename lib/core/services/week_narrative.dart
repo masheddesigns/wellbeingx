@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/narrative_memory_repository.dart';
@@ -9,6 +10,7 @@ import '../../domain/engines/narrative_memory_engine.dart';
 import '../../domain/engines/personality_classifier.dart';
 import '../../domain/engines/sleep_engine.dart';
 import '../../domain/models/daily_stats.dart';
+import '../../domain/models/personality_type.dart';
 import '../../presentation/dashboard/dashboard_state.dart';
 
 /// One synthesized [NarrativeWeek] + the windows that produced it. Other
@@ -29,6 +31,44 @@ class WeekNarrative {
   });
 
   WeekMood get mood => week.mood;
+}
+
+class _SynthesisParams {
+  final DailyStats today;
+  final List<DailyStats> last7Days;
+  final List<DailyStats> previous7Days;
+  final BehaviorReport behavior;
+  final SleepReport sleep;
+  final ContinuousUsageReport continuous;
+  final PersonalityType personality;
+  final List<DailyStats> last28Days;
+  final List<NarrativeBeat> memoryBeats;
+
+  const _SynthesisParams({
+    required this.today,
+    required this.last7Days,
+    required this.previous7Days,
+    required this.behavior,
+    required this.sleep,
+    required this.continuous,
+    required this.personality,
+    required this.last28Days,
+    required this.memoryBeats,
+  });
+}
+
+NarrativeWeek _synthesizeInIsolate(_SynthesisParams params) {
+  return const NarrativeIntelligenceEngine().synthesize(
+    today: params.today,
+    last7Days: params.last7Days,
+    previous7Days: params.previous7Days,
+    behavior: params.behavior,
+    sleep: params.sleep,
+    continuous: params.continuous,
+    personality: params.personality,
+    last28Days: params.last28Days,
+    memoryBeats: params.memoryBeats,
+  );
 }
 
 /// Shared synthesis. Anyone who needs the mood, identity sentence, beats, or
@@ -66,16 +106,19 @@ final weekNarrativeProvider = FutureProvider<WeekNarrative>((ref) async {
   );
   await memRepo.save(memUpdate.next);
 
-  final week = const NarrativeIntelligenceEngine().synthesize(
-    today: today,
-    last7Days: current,
-    previous7Days: previous,
-    behavior: behavior,
-    sleep: sleep,
-    continuous: continuous,
-    personality: personality,
-    last28Days: last28,
-    memoryBeats: memUpdate.beats,
+  final week = await compute(
+    _synthesizeInIsolate,
+    _SynthesisParams(
+      today: today,
+      last7Days: current,
+      previous7Days: previous,
+      behavior: behavior,
+      sleep: sleep,
+      continuous: continuous,
+      personality: personality,
+      last28Days: last28,
+      memoryBeats: memUpdate.beats,
+    ),
   );
 
   return WeekNarrative(

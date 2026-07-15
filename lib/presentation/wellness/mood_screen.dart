@@ -203,51 +203,73 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
   }
 }
 
-class _MoodUsageCorrelation extends ConsumerWidget {
+class _MoodUsageCorrelation extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final usage = ref.watch(usageRepositoryProvider);
-    final moodsRepo = ref.watch(moodRepositoryProvider);
+  ConsumerState<_MoodUsageCorrelation> createState() => _MoodUsageCorrelationState();
+}
+
+class _MoodUsageCorrelationState extends ConsumerState<_MoodUsageCorrelation> {
+  late Future<({double r, Duration avgHigh, Duration avgLow})> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadCorrelation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MoodUsageCorrelation oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload if repositories change (though rare)
+    _future = _loadCorrelation();
+  }
+
+  Future<({double r, Duration avgHigh, Duration avgLow})> _loadCorrelation() async {
+    final usage = ref.read(usageRepositoryProvider);
+    final moodsRepo = ref.read(moodRepositoryProvider);
+    final last7 = await usage.rangeStats(7);
+    final moods = await moodsRepo.recent(limit: 100);
+    final byDay = <int, List<int>>{};
+    for (final m in moods) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(m.timestampMs);
+      final dayKey = DateTime(dt.year, dt.month, dt.day)
+          .millisecondsSinceEpoch ~/
+          Duration.millisecondsPerDay;
+      byDay.putIfAbsent(dayKey, () => <int>[]).add(m.score);
+    }
+    Duration sumHigh = Duration.zero;
+    int nHigh = 0;
+    Duration sumLow = Duration.zero;
+    int nLow = 0;
+    for (final d in last7) {
+      final key = d.day.millisecondsSinceEpoch ~/
+          Duration.millisecondsPerDay;
+      final scores = byDay[key];
+      if (scores == null || scores.isEmpty) continue;
+      final avg = scores.reduce((a, b) => a + b) / scores.length;
+      if (avg >= 4) {
+        sumHigh += d.screenTime;
+        nHigh++;
+      } else if (avg <= 2) {
+        sumLow += d.screenTime;
+        nLow++;
+      }
+    }
+    return (
+      r: 0.0,
+      avgHigh: nHigh == 0
+          ? Duration.zero
+          : Duration(microseconds: sumHigh.inMicroseconds ~/ nHigh),
+      avgLow: nLow == 0
+          ? Duration.zero
+          : Duration(microseconds: sumLow.inMicroseconds ~/ nLow),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<({double r, Duration avgHigh, Duration avgLow})>(
-      future: () async {
-        final last7 = await usage.rangeStats(7);
-        final moods = await moodsRepo.recent(limit: 100);
-        final byDay = <int, List<int>>{};
-        for (final m in moods) {
-          final dt = DateTime.fromMillisecondsSinceEpoch(m.timestampMs);
-          final dayKey = DateTime(dt.year, dt.month, dt.day)
-              .millisecondsSinceEpoch ~/
-              Duration.millisecondsPerDay;
-          byDay.putIfAbsent(dayKey, () => <int>[]).add(m.score);
-        }
-        Duration sumHigh = Duration.zero;
-        int nHigh = 0;
-        Duration sumLow = Duration.zero;
-        int nLow = 0;
-        for (final d in last7) {
-          final key = d.day.millisecondsSinceEpoch ~/
-              Duration.millisecondsPerDay;
-          final scores = byDay[key];
-          if (scores == null || scores.isEmpty) continue;
-          final avg = scores.reduce((a, b) => a + b) / scores.length;
-          if (avg >= 4) {
-            sumHigh += d.screenTime;
-            nHigh++;
-          } else if (avg <= 2) {
-            sumLow += d.screenTime;
-            nLow++;
-          }
-        }
-        return (
-          r: 0.0,
-          avgHigh: nHigh == 0
-              ? Duration.zero
-              : Duration(microseconds: sumHigh.inMicroseconds ~/ nHigh),
-          avgLow: nLow == 0
-              ? Duration.zero
-              : Duration(microseconds: sumLow.inMicroseconds ~/ nLow),
-        );
-      }(),
+      future: _future,
       builder: (ctx, snap) {
         if (!snap.hasData) {
           return const GlassCard(
