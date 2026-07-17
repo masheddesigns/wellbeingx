@@ -15,14 +15,21 @@ class CompositeScoresEngine {
     required BehaviorReport behavior,
     required NotificationReport notif,
   }) {
+    // last7Days' last entry is always "today" — a day still in progress.
+    // Trend deltas must compare complete days only, otherwise a partial
+    // today gets averaged in against 7 complete previous-week days and
+    // skews every delta toward a false "improvement" or "decline".
+    final trend7 = last7Days.length > 1
+        ? last7Days.sublist(0, last7Days.length - 1)
+        : last7Days;
     return ScorePack(
-      digitalBalance: _digitalBalance(today, last7Days, previous7Days, behavior),
+      digitalBalance: _digitalBalance(today, trend7, previous7Days, behavior),
       attentionFragmentation:
-          _attentionFragmentation(today, last7Days, previous7Days, behavior),
+          _attentionFragmentation(today, trend7, previous7Days, behavior),
       notificationAnxiety:
-          _notificationAnxiety(today, last7Days, previous7Days, notif),
-      appDependency: _appDependency(today, last7Days, previous7Days),
-      socialToxicity: _socialToxicity(today, last7Days, previous7Days),
+          _notificationAnxiety(today, trend7, previous7Days, notif),
+      appDependency: _appDependency(today, trend7, previous7Days),
+      socialToxicity: _socialToxicity(today, trend7, previous7Days),
     );
   }
 

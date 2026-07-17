@@ -81,7 +81,6 @@ class _DayAccum {
 
   /// Longest gap between any two app sessions (proxy for "screen-off" period).
   int longestScreenOffMs = 0;
-  int? lastSessionEndMs;
 
   /// First/last app the user opened on this day.
   String? firstAppPkg;
@@ -93,6 +92,13 @@ class _DayAccum {
   /// Event-level texture waiting to be attached to the next foreground episode.
   int pendingUnlocks = 0;
   int pendingSwitches = 0;
+}
+
+/// Cross-day session bookkeeping. Kept outside [_DayAccum] (which is keyed
+/// per calendar day) because the longest screen-off gap is almost always the
+/// overnight one, spanning the boundary between two `_DayAccum`s.
+class _SessionCursor {
+  int? lastSessionEndMs;
 }
 
 class UsageRepository {
@@ -135,6 +141,7 @@ class UsageRepository {
     // Group events by day-epoch and accumulate.
     final accs = <int, _DayAccum>{};
     final episodes = <_BehaviorEpisodeDraft>[];
+    final sessionCursor = _SessionCursor();
     int? activeStart;
     String? activeApp;
     int? screenOnAt;
@@ -152,7 +159,7 @@ class UsageRepository {
       switch (type) {
         case UsageEvt.activityResumed:
           if (activeApp != null && activeStart != null) {
-            _attribute(accs, episodes, activeApp, activeStart, t);
+            _attribute(accs, episodes, sessionCursor, activeApp, activeStart, t);
           }
           if (activeApp != null && activeApp != pkg) {
             acc.pendingSwitches += 1;
@@ -162,7 +169,7 @@ class UsageRepository {
           break;
         case UsageEvt.activityPaused:
           if (activeApp != null && activeStart != null) {
-            _attribute(accs, episodes, activeApp, activeStart, t);
+            _attribute(accs, episodes, sessionCursor, activeApp, activeStart, t);
             activeApp = null;
             activeStart = null;
           }
@@ -201,6 +208,7 @@ class UsageRepository {
       _attribute(
         accs,
         episodes,
+        sessionCursor,
         activeApp,
         activeStart,
         end.millisecondsSinceEpoch,
@@ -222,9 +230,13 @@ class UsageRepository {
         if (_isExcludedPackage(pkg)) continue;
         final totalMs = ((agg['totalForegroundMs'] as num?) ?? 0).toInt();
         if (totalMs <= 0) continue;
+        // `lastTimeUsed` is the package's genuine last-used timestamp;
+        // `lastTimeStamp` is only the end-of-day query-bucket boundary (see
+        // MainActivity.kt), so it must never be preferred — using it first
+        // pinned every OEM-aggregate fallback app to hour 23 (sleep window).
         final lastMs =
-            ((agg['lastTimeStamp'] as num?) ??
-                    (agg['lastTimeUsed'] as num?) ??
+            ((agg['lastTimeUsed'] as num?) ??
+                    (agg['lastTimeStamp'] as num?) ??
                     end.millisecondsSinceEpoch)
                 .toInt();
         final dayEpoch = WxDates.dayEpoch(
@@ -469,6 +481,7 @@ class UsageRepository {
   void _attribute(
     Map<int, _DayAccum> accs,
     List<_BehaviorEpisodeDraft> episodes,
+    _SessionCursor cursor,
     String pkg,
     int startMs,
     int endMs,
@@ -505,36 +518,52 @@ class UsageRepository {
       ),
     );
 
-    if (sessionMs > accStart.longestSessionMs) {
-      accStart.longestSessionMs = sessionMs;
-    }
-    if (accStart.lastSessionEndMs != null) {
-      final gap = startMs - accStart.lastSessionEndMs!;
+    // Screen-off gap tracked across the whole ingest window (not per day) —
+    // the longest gap is almost always the overnight one spanning midnight,
+    // which a per-day accumulator can never see since the next day always
+    // starts with a fresh, gap-less accumulator.
+    if (cursor.lastSessionEndMs != null) {
+      final gap = startMs - cursor.lastSessionEndMs!;
       if (gap > accStart.longestScreenOffMs) {
         accStart.longestScreenOffMs = gap;
       }
     }
-    accStart.lastSessionEndMs = endMs;
+    cursor.lastSessionEndMs = endMs;
 
     accStart.firstAppPkg ??= pkg;
     accStart.lastAppPkg = pkg;
 
-    // Binge — distracting session over 30 min. Use heuristic classification
-    // since app metadata isn't available here.
-    if (sessionMs >= 30 * 60 * 1000 &&
-        CategoryHeuristics.classify(pkg).isDistracting) {
-      accStart.bingeCount += 1;
+    // ---- Day-clipped session/binge metrics (a session crossing midnight is
+    // split at the boundary, consistent with how foreground time is split
+    // in the per-segment loop below) ----
+    int dayCursor = startMs;
+    while (dayCursor < endMs) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(dayCursor);
+      final dayEpoch = WxDates.dayEpoch(dt);
+      final dayStart = WxDates.fromDayEpoch(dayEpoch).millisecondsSinceEpoch;
+      final dayEnd = dayStart + Duration.millisecondsPerDay;
+      final segEnd = endMs < dayEnd ? endMs : dayEnd;
+      final daySessionMs = segEnd - dayCursor;
+      final acc = accs.putIfAbsent(dayEpoch, _DayAccum.new);
+      if (daySessionMs > acc.longestSessionMs) {
+        acc.longestSessionMs = daySessionMs;
+      }
+      if (daySessionMs >= 30 * 60 * 1000 &&
+          CategoryHeuristics.classify(pkg).isDistracting) {
+        acc.bingeCount += 1;
+      }
+      dayCursor = segEnd;
     }
 
     // ---- Per-segment slicing (hour buckets, sleep window, app aggregate) ----
-    int cursor = startMs;
-    while (cursor < endMs) {
-      final dt = DateTime.fromMillisecondsSinceEpoch(cursor);
+    int segCursor = startMs;
+    while (segCursor < endMs) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(segCursor);
       final dayEpoch = WxDates.dayEpoch(dt);
       final dayStart = WxDates.fromDayEpoch(dayEpoch).millisecondsSinceEpoch;
       final dayEnd = dayStart + Duration.millisecondsPerDay;
       final hourStart =
-          (cursor ~/ Duration.millisecondsPerHour) *
+          (segCursor ~/ Duration.millisecondsPerHour) *
           Duration.millisecondsPerHour;
       final hourEnd = hourStart + Duration.millisecondsPerHour;
       final segEnd = <int>[
@@ -542,17 +571,17 @@ class UsageRepository {
         dayEnd,
         hourEnd,
       ].reduce((a, b) => a < b ? a : b);
-      final segMs = segEnd - cursor;
+      final segMs = segEnd - segCursor;
       if (segMs <= 0) break;
       final acc = accs.putIfAbsent(dayEpoch, _DayAccum.new);
       final app = acc.perApp.putIfAbsent(pkg, _AppAccum.new);
       app.fgMs += segMs;
-      if (cursor == startMs) app.opens += 1;
+      if (segCursor == startMs) app.opens += 1;
       acc.hourFg.update(dt.hour, (v) => v + segMs, ifAbsent: () => segMs);
       if (dt.hour >= _sleepStart || dt.hour < _sleepEnd) {
         acc.sleepMs += segMs;
       }
-      cursor = segEnd;
+      segCursor = segEnd;
     }
   }
 

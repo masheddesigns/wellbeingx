@@ -50,9 +50,21 @@ class AnalyticsEngine {
   }) {
     final weekTotal = _sumScreen(currentWeek);
     final prev = _sumScreen(previousWeek);
-    final daily = currentWeek.isEmpty
+
+    // currentWeek's last entry is always "today" — a day still in progress.
+    // Averaging/growth math must exclude it: comparing a partial day against
+    // 7 complete previous-week days mechanically depresses both figures,
+    // most severely early in the day.
+    final completedCurrent = currentWeek.length > 1
+        ? currentWeek.sublist(0, currentWeek.length - 1)
+        : currentWeek;
+    final daily = completedCurrent.isEmpty
         ? Duration.zero
-        : Duration(microseconds: weekTotal.inMicroseconds ~/ currentWeek.length);
+        : Duration(
+            microseconds:
+                _sumScreen(completedCurrent).inMicroseconds ~/
+                    completedCurrent.length,
+          );
 
     final byCat = <AppCategory, Duration>{};
     final byApp = <String, AppUsage>{};
@@ -75,9 +87,18 @@ class AnalyticsEngine {
     final top = byApp.values.toList()
       ..sort((a, b) => b.foreground.compareTo(a.foreground));
 
+    // Compare like-for-like: only the completed days of this week against
+    // the same number of days from the previous week, so a partial "today"
+    // is never compared against a full previous week.
     int growthPct = 0;
-    if (prev.inSeconds > 0) {
-      growthPct = ((weekTotal.inSeconds - prev.inSeconds) * 100) ~/ prev.inSeconds;
+    final comparablePrev = previousWeek.length >= completedCurrent.length
+        ? _sumScreen(previousWeek.sublist(0, completedCurrent.length))
+        : prev;
+    final comparableCurrent = _sumScreen(completedCurrent);
+    if (comparablePrev.inSeconds > 0) {
+      growthPct = ((comparableCurrent.inSeconds - comparablePrev.inSeconds) *
+              100) ~/
+          comparablePrev.inSeconds;
     }
 
     final distraction = top

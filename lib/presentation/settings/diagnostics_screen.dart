@@ -73,7 +73,7 @@ class DiagnosticsScreen extends ConsumerWidget {
                   onPressed: () async {
                     Haptics.tap();
                     WxLog.info('repair', 'manual re-ingest requested');
-                    await runBackgroundIngest(ref);
+                    await runBackgroundIngest(ref, force: true);
                   },
                 ),
                 const SizedBox(height: 10),
@@ -118,7 +118,7 @@ class DiagnosticsScreen extends ConsumerWidget {
                       }
                       // Force fresh ingest after wipe.
                       if (context.mounted) {
-                        await runBackgroundIngest(ref);
+                        await runBackgroundIngest(ref, force: true);
                       }
                     }
                   },
