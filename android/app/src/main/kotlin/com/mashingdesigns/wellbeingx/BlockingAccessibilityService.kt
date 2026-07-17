@@ -1,4 +1,4 @@
-package com.wellbeingx.wellbeingx
+package com.mashingdesigns.wellbeingx
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent

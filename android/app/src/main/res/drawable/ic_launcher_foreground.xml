@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Scaled ~0.85 around the icon center so the arc tips clear Android's
+         adaptive-icon safe-zone circle (66% of the full canvas) on every
+         launcher mask shape. -->
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.85"
+        android:scaleY="0.85">
+
+        <!-- back orbit (violet -> cyan) -->
+        <path
+            android:pathData="M 149.24 275.74 A 170 78 28 1 1 391.51 350.92"
+            android:strokeWidth="15"
+            android:strokeLineCap="round"
+            android:strokeAlpha="0.62"
+            android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="149.24" android:startY="275.74"
+                    android:endX="391.51" android:endY="350.92">
+                    <item android:offset="0" android:color="#FFB28DFF"/>
+                    <item android:offset="1" android:color="#FF6FD9FF"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- front orbit (mint -> deep mint) -->
+        <path
+            android:pathData="M 299.34 156.45 A 170 78 -28 1 1 101.54 315.27"
+            android:strokeWidth="17"
+            android:strokeLineCap="round"
+            android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="299.34" android:startY="156.45"
+                    android:endX="101.54" android:endY="315.27">
+                    <item android:offset="0" android:color="#FF7CF6C2"/>
+                    <item android:offset="1" android:color="#FF2EE6A6"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- soft glow behind the lead node -->
+        <path android:pathData="M 257.34,156.45 A 42,42 0 1,0 341.34,156.45 A 42,42 0 1,0 257.34,156.45 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="radial"
+                    android:centerX="299.34"
+                    android:centerY="156.45"
+                    android:gradientRadius="42">
+                    <item android:offset="0" android:color="#807CF6C2"/>
+                    <item android:offset="1" android:color="#007CF6C2"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- lead node -->
+        <path
+            android:pathData="M 282.34,156.45 A 17,17 0 1,0 316.34,156.45 A 17,17 0 1,0 282.34,156.45 Z"
+            android:fillColor="#7CF6C2"/>
+        <path
+            android:pathData="M 290.34,156.45 A 9,9 0 1,0 308.34,156.45 A 9,9 0 1,0 290.34,156.45 Z"
+            android:fillColor="#EAFFF6"/>
+    </group>
+</vector>

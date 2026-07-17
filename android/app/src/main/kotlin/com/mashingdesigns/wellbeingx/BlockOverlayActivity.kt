@@ -1,4 +1,4 @@
-package com.wellbeingx.wellbeingx
+package com.mashingdesigns.wellbeingx
 
 import android.app.Activity
 import android.content.Intent

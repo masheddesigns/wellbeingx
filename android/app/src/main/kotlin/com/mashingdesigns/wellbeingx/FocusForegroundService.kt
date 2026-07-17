@@ -1,4 +1,4 @@
-package com.wellbeingx.wellbeingx
+package com.mashingdesigns.wellbeingx
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -110,7 +110,7 @@ class FocusForegroundService : Service() {
         val title = if (mode == "deep") "Deep Work" else "Focus"
         val text = String.format("%02d:%02d remaining", mins, secs)
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("$title in progress")
             .setContentText(text)
             .setOngoing(true)

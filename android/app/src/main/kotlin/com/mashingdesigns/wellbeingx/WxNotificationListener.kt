@@ -1,4 +1,4 @@
-package com.wellbeingx.wellbeingx
+package com.mashingdesigns.wellbeingx
 
 import android.app.Notification
 import android.content.Context

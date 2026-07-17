@@ -1,4 +1,4 @@
-package com.wellbeingx.wellbeingx
+package com.mashingdesigns.wellbeingx
 
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
@@ -266,7 +266,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private val excludedExact = setOf(
-        "com.wellbeingx.wellbeingx",
+        "com.mashingdesigns.wellbeingx",
         "android",
         "com.android.systemui",
         "com.android.settings",

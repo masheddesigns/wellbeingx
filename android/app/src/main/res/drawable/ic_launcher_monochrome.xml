@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Single-color silhouette for Android 13+ themed icons — the OS
+         replaces this fill with the user's wallpaper-derived tint, so shape
+         and alpha are all that matter. Same 0.85 safe-zone scale as the
+         foreground layer. -->
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.85"
+        android:scaleY="0.85">
+
+        <path
+            android:pathData="M 149.24 275.74 A 170 78 28 1 1 391.51 350.92"
+            android:strokeWidth="15"
+            android:strokeLineCap="round"
+            android:strokeColor="#FF000000"
+            android:fillColor="#00000000"/>
+
+        <path
+            android:pathData="M 299.34 156.45 A 170 78 -28 1 1 101.54 315.27"
+            android:strokeWidth="17"
+            android:strokeLineCap="round"
+            android:strokeColor="#FF000000"
+            android:fillColor="#00000000"/>
+
+        <path
+            android:pathData="M 282.34,156.45 A 17,17 0 1,0 316.34,156.45 A 17,17 0 1,0 282.34,156.45 Z"
+            android:fillColor="#FF000000"/>
+    </group>
+</vector>

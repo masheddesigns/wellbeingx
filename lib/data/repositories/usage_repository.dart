@@ -36,7 +36,7 @@ const int _maxAppDailyMs = 14 * 60 * 60 * 1000;
 /// Surfaces that are not user-facing apps. We exclude these from screen-time
 /// totals so our numbers match what Settings → Digital Wellbeing shows.
 const Set<String> _excludedPackages = <String>{
-  'com.wellbeingx.wellbeingx', // never count ourselves
+  'com.mashingdesigns.wellbeingx', // never count ourselves
   'android',
   'com.android.systemui',
   'com.android.settings',

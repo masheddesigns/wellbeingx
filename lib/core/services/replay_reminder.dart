@@ -33,7 +33,7 @@ class ReplayReminderService {
       // anchored to the device wall clock via DateTime.now().
       const initIos = DarwinInitializationSettings();
       const initAndroid =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
+          AndroidInitializationSettings('@drawable/ic_notification');
       await _plugin.initialize(
         const InitializationSettings(
           android: initAndroid,

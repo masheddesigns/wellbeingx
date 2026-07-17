@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.wellbeingx.wellbeingx"
+    namespace = "com.mashingdesigns.wellbeingx"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.wellbeingx.wellbeingx"
+        applicationId = "com.mashingdesigns.wellbeingx"
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
