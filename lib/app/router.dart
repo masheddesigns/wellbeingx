@@ -9,6 +9,7 @@ import '../presentation/analytics/timeline_screen.dart';
 import '../presentation/blocking/app_picker_screen.dart';
 import '../presentation/blocking/stay_away_screen.dart';
 import '../presentation/dashboard/dashboard_screen.dart';
+import '../presentation/dashboard/today_apps_screen.dart';
 import '../presentation/focus/focus_analytics_screen.dart';
 import '../presentation/history/continuous_history_screen.dart';
 import '../presentation/history/history_screen.dart';
@@ -101,6 +102,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       _root('/focus-ritual', () => const FocusRitualScreen()),
       _root('/focus-analytics', () => const FocusAnalyticsScreen()),
       _root('/analytics', () => const AnalyticsScreen()),
+      _root('/today-apps', () => const TodayAppsScreen()),
       _root('/timeline', () => const TimelineScreen()),
       _root('/unlock-history', () => const UnlockHistoryScreen()),
       _root('/sleep-morning', () => const SleepMorningScreen()),

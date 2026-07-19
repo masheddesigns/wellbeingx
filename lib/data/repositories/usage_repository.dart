@@ -33,10 +33,24 @@ const int _maxSessionMs = 2 * 60 * 60 * 1000;
 /// strong signal that something leaked. Belt-and-braces in addition to session cap.
 const int _maxAppDailyMs = 14 * 60 * 60 * 1000;
 
+/// Packages whose OEM usage-stats aggregate has been confirmed unreliable on
+/// devices we've tested against — independently cross-checked twice against
+/// both raw Android usage events and the OEM's own Screen Time widget, both
+/// times showing well under a minute of real daily use while the aggregate
+/// API reported 10+ minutes. Unlike the general sane-ceiling cap above (which
+/// only catches wildly implausible multi-hour readings), this catches the
+/// same failure mode at a smaller scale for packages where we have specific
+/// repeated evidence the aggregate can't be trusted at all.
+const Set<String> _unreliableAggregatePackages = <String>{
+  'com.google.android.deskclock',
+};
+const int _unreliableAggregateMaxMs = 3 * 60 * 1000;
+
 /// Surfaces that are not user-facing apps. We exclude these from screen-time
 /// totals so our numbers match what Settings → Digital Wellbeing shows.
 const Set<String> _excludedPackages = <String>{
   'com.mashingdesigns.wellbeingx', // never count ourselves
+  'com.wellbeingx.wellbeingx', // pre-rename package — same app, historical data
   'android',
   'com.android.systemui',
   'com.android.settings',
@@ -294,14 +308,28 @@ class UsageRepository {
         for (final pkgEntry in pkgTotals.entries) {
           final pkg = pkgEntry.key;
           final oemMs = pkgEntry.value;
+          final shares = priorPerAppHourShares[pkg];
+          final hasEventDistribution = shares != null && shares.isNotEmpty;
+
+          if (_unreliableAggregatePackages.contains(pkg) &&
+              oemMs > _unreliableAggregateMaxMs) {
+            WxLog.warn(
+              'ingest',
+              'discarding $pkg on day $dayEpoch: ${oemMs}ms exceeds the '
+              '${_unreliableAggregateMaxMs}ms trust threshold for a '
+              'known-unreliable aggregate source — keeping whatever real '
+              'event data exists instead',
+            );
+            continue;
+          }
+
           // Override the per-app foreground.
           final app = acc.perApp[pkg] ?? (_AppAccum()..opens = 1);
           app.fgMs = oemMs;
           if (acc.perApp[pkg] == null) acc.perApp[pkg] = app;
 
           // Distribute oemMs across hour buckets.
-          final shares = priorPerAppHourShares[pkg];
-          if (shares != null && shares.isNotEmpty) {
+          if (hasEventDistribution) {
             final shareTotal = shares.values.fold<double>(0, (a, b) => a + b);
             if (shareTotal > 0) {
               shares.forEach((h, share) {
@@ -403,12 +431,26 @@ class UsageRepository {
         accs.forEach((dayEpoch, acc) {
           final notifs = notifsByDayApp[dayEpoch] ?? const <String, int>{};
           for (final entry in acc.perApp.entries) {
-            // Cap per-app daily foreground to a sane ceiling. Belt-and-braces:
-            // leaked sessions are already capped, but if many resumes arrived
-            // without pauses, totals could still drift.
-            final fgMs = entry.value.fgMs > _maxAppDailyMs
-                ? _maxAppDailyMs
-                : entry.value.fgMs;
+            // No single app can plausibly be foregrounded for 14+ continuous
+            // hours in a day. Clamping such a value down to exactly
+            // _maxAppDailyMs used to produce a fake-plausible, suspiciously
+            // round reading — seen in the wild as an identical 14h00m00.000s
+            // figure for two unrelated apps on two unrelated days, both
+            // sourced from a corrupted OEM usage-stats aggregate (see
+            // queryAggregates in MainActivity.kt). Once the ceiling is hit
+            // the underlying number is already known-bad, so discard the
+            // package for that day entirely rather than report a fabricated
+            // (if "safe-looking") number.
+            if (entry.value.fgMs > _maxAppDailyMs) {
+              WxLog.warn(
+                'ingest',
+                'discarding ${entry.key} on day $dayEpoch: '
+                '${entry.value.fgMs}ms exceeds the ${_maxAppDailyMs}ms sane '
+                'ceiling for a single day',
+              );
+              continue;
+            }
+            final fgMs = entry.value.fgMs;
             b.insert(
               _db.dailyAggregates,
               DailyAggregatesCompanion.insert(

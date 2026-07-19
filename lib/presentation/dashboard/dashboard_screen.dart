@@ -273,7 +273,18 @@ class _DashboardBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        AnimatedHero(today: today, yesterday: yesterday, palette: snap.palette),
+        InkWell(
+          borderRadius: BorderRadius.circular(28),
+          onTap: () {
+            Haptics.cardTap();
+            context.push('/today-apps');
+          },
+          child: AnimatedHero(
+            today: today,
+            yesterday: yesterday,
+            palette: snap.palette,
+          ),
+        ),
         const SizedBox(height: 14),
         const _DailyRewardCallout(),
         if (snap.milestones.isNotEmpty) ...<Widget>[

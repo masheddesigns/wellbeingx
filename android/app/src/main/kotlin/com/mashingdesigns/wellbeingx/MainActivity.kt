@@ -295,6 +295,7 @@ class MainActivity : FlutterActivity() {
 
     private val excludedExact = setOf(
         "com.mashingdesigns.wellbeingx",
+        "com.wellbeingx.wellbeingx", // pre-rename package — same app, historical data
         "android",
         "com.android.systemui",
         "com.android.settings",
