@@ -248,7 +248,11 @@ bool _isAutoIngestDue(int lastIngestMs) {
 DateTime _ingestStart(int lastIngestMs) {
   final now = DateTime.now();
   if (lastIngestMs <= 0) {
-    return now.subtract(const Duration(days: 3));
+    // First ingest ever — Android's UsageStatsManager tracks usage
+    // system-wide regardless of when this app was installed, so backfill as
+    // far back as the OS retains (matches the 14-day window the rest of the
+    // dashboard already reads via rangeStats(14)/last14DaysProvider).
+    return now.subtract(const Duration(days: 14));
   }
 
   final overlapStart = DateTime.fromMillisecondsSinceEpoch(
