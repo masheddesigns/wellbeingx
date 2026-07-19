@@ -204,7 +204,14 @@ class MainActivity : FlutterActivity() {
         // Query day-by-day. queryUsageStats over a multi-day range can return
         // buckets that span multiple days; their totalTimeVisible/InForeground
         // covers the WHOLE bucket, not just one calendar day. Querying with
-        // a 1-day window guarantees per-day-attributable totals.
+        // a 1-day window guarantees per-day-attributable totals in principle —
+        // but on some OEM ROMs, queryUsageStats(INTERVAL_DAILY, ...) itself
+        // hands back a raw stored bucket whose totalTimeVisible reflects a
+        // coarser (weekly/monthly) window than what was actually requested,
+        // seen in the wild inflating a sparsely-used app (an alarm clock) by
+        // 20x for a single day. queryAndAggregateUsageStats builds its numbers
+        // fresh from raw events clipped to exactly [begin, end), so it can't
+        // exhibit that class of bug — use it whenever available (API 28+).
         val out = ArrayList<Map<String, Any?>>()
         val cal = java.util.Calendar.getInstance()
         cal.timeInMillis = startMs
@@ -218,32 +225,53 @@ class MainActivity : FlutterActivity() {
             val dayEnd = dayStart + 24L * 60L * 60L * 1000L
             // Clamp the last bucket to the requested end.
             val clampedEnd = if (dayEnd > endMs) endMs else dayEnd
-            val list = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                dayStart,
-                clampedEnd
-            )
-            if (!list.isNullOrEmpty()) {
-                // Aggregate by package within the day so multiple buckets
-                // for the same app on the same day sum once, not duplicate.
-                val perPkg = HashMap<String, Long>()
-                val perPkgLast = HashMap<String, Long>()
-                for (s in list) {
-                    val pkg = s.packageName ?: continue
+            val windowMs = clampedEnd - dayStart
+
+            val perPkg = HashMap<String, Long>()
+            val perPkgLast = HashMap<String, Long>()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val aggregated = usm.queryAndAggregateUsageStats(dayStart, clampedEnd)
+                for ((pkg, s) in aggregated) {
                     if (isExcludedSurface(pkg)) continue
                     if (!launchablePkgs.contains(pkg) && looksLikeSystemSurface(pkg)) continue
-                    val ms = visibleOrForegroundMs(s)
+                    val ms = visibleOrForegroundMs(s).coerceAtMost(windowMs)
                     if (ms <= 0L) continue
-                    perPkg[pkg] = (perPkg[pkg] ?: 0L) + ms
-                    if (s.lastTimeUsed > (perPkgLast[pkg] ?: 0L)) {
-                        perPkgLast[pkg] = s.lastTimeUsed
+                    perPkg[pkg] = ms
+                    perPkgLast[pkg] = s.lastTimeUsed
+                }
+            } else {
+                val list = usm.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    dayStart,
+                    clampedEnd
+                )
+                if (!list.isNullOrEmpty()) {
+                    // Aggregate by package within the day so multiple buckets
+                    // for the same app on the same day sum once, not duplicate.
+                    for (s in list) {
+                        val pkg = s.packageName ?: continue
+                        if (isExcludedSurface(pkg)) continue
+                        if (!launchablePkgs.contains(pkg) && looksLikeSystemSurface(pkg)) continue
+                        // Best-effort sanity clamp — doesn't fully protect API
+                        // 26/27 devices from the bucket-bleed bug above, but
+                        // can't hurt.
+                        val ms = visibleOrForegroundMs(s).coerceAtMost(windowMs)
+                        if (ms <= 0L) continue
+                        perPkg[pkg] = (perPkg[pkg] ?: 0L) + ms
+                        if (s.lastTimeUsed > (perPkgLast[pkg] ?: 0L)) {
+                            perPkgLast[pkg] = s.lastTimeUsed
+                        }
                     }
                 }
+            }
+
+            if (perPkg.isNotEmpty()) {
                 for ((pkg, ms) in perPkg) {
                     out.add(
                         mapOf(
                             "packageName" to pkg,
-                            "totalForegroundMs" to ms,
+                            "totalForegroundMs" to ms.coerceAtMost(windowMs),
                             "firstTimeStamp" to dayStart,
                             "lastTimeStamp" to clampedEnd - 1,
                             "lastTimeUsed" to (perPkgLast[pkg] ?: clampedEnd - 1)
